@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Fujifilm X-H1 Film Cam</title>
+
+  <!-- SOPORTE APPLE / SAFARI -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Fuji X-H1">
+  <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/google/material-design-icons/master/png/image/camera_alt/materialicons/192dp/2x/baseline_camera_alt_black_192dp.png">
+
+  <!-- SOPORTE ANDROID / CHROME (Web App Manifest Data-URI estándar) -->
+  <meta name="theme-color" content="#101012">
+  <link rel="manifest" href='data:application/manifest+json,{"name":"Fujifilm X-H1 Film Cam","short_name":"FujiCam","start_url":".","display":"standalone","background_color":"#101012","theme_color":"#101012","icons":[{"src":"https://raw.githubusercontent.com/google/material-design-icons/master/png/image/camera_alt/materialicons/192dp/2x/baseline_camera_alt_black_192dp.png","sizes":"192x192","type":"image/png"}]}'>
+
+  <!-- REGISTRO DEL SERVICE WORKER REAL -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(reg => console.log('PWA Service Worker OK:', reg.scope))
+          .catch(err => console.error('Error registrando sw.js:', err));
+      });
+    }
+  </script>
+
+  <style>
+    :root {
+      --fuji-green: #37d67a;
+      --fuji-lcd-bg: #8ba892;
+      --fuji-lcd-text: #142217;
+      --fuji-body: #101012;
+      --fuji-metal: #242429;
+      --fuji-yellow: #f59e0b;
+      --fuji-font: 'Courier New', Courier, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+    body, html {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #000; font-family: var(--fuji-font); color: #e4e4e7;
+    }
+    #camera-app {
+      position: relative; width: 100vw; height: 100vh;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    #top-bar {
+      position: relative; z-index: 10; background: var(--fuji-body);
+      border-bottom: 2px solid #27272a; padding: 10px 14px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .brand-stamp {
+      font-size: 11px; font-weight: 900; letter-spacing: 1.5px; color: #a1a1aa;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .brand-stamp span { color: #ef4444; font-size: 9px; }
+
+    .xh1-sub-lcd {
+      background: var(--fuji-lcd-bg); color: var(--fuji-lcd-text);
+      font-family: 'Courier New', monospace; padding: 4px 8px; border-radius: 3px;
+      border: 2px solid #3f3f46; box-shadow: inset 1px 1px 4px rgba(0,0,0,0.4);
+      display: flex; flex-direction: column; gap: 2px; min-width: 155px;
+    }
+    .lcd-row { display: flex; justify-content: space-between; font-size: 10px; font-weight: bold; }
+    .lcd-main { font-size: 13px; font-weight: 900; letter-spacing: 0.5px; }
+
+    #viewfinder-container {
+      position: relative; flex: 1; overflow: hidden;
+      display: flex; align-items: center; justify-content: center; background: #000;
+    }
+    video { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+    #grain-screen {
+      position: absolute; inset: 0; z-index: 3; pointer-events: none; opacity: 0.22;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    }
+    #vignette-screen {
+      position: absolute; inset: 0; z-index: 3; pointer-events: none;
+      box-shadow: inset 0 0 60px rgba(0,0,0,0.6);
+    }
+    #viewfinder-hud {
+      position: absolute; inset: 0; z-index: 4; pointer-events: none;
+      padding: 14px; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .hud-grid-h { position: absolute; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.18); }
+    .hud-grid-v { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.18); }
+    .hud-focus {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 44px; height: 44px; border: 1.5px solid var(--fuji-green);
+    }
+    .hud-tag {
+      background: rgba(0,0,0,0.65); padding: 2px 6px; border-radius: 2px;
+      font-size: 10px; border: 1px solid rgba(255,255,255,0.25);
+    }
+
+    #bottom-console {
+      position: relative; z-index: 10; background: var(--fuji-body);
+      border-top: 2px solid #27272a; padding: 10px 14px 26px 14px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .film-selector-wrap {
+      display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none;
+    }
+    .film-selector-wrap::-webkit-scrollbar { display: none; }
+    .film-pill {
+      flex: 0 0 auto; background: var(--fuji-metal); color: #a1a1aa;
+      border: 1px solid #3f3f46; padding: 5px 10px; font-size: 10px;
+      border-radius: 3px; font-family: var(--fuji-font); cursor: pointer;
+    }
+    .film-pill.active { background: #27272a; color: var(--fuji-yellow); border-color: var(--fuji-yellow); }
+
+    .shutter-row { display: flex; align-items: center; justify-content: space-between; padding-top: 4px; }
+    .analog-btn {
+      background: #27272a; border: 1px solid #52525b; color: #d4d4d8;
+      padding: 8px 12px; font-size: 11px; font-family: var(--fuji-font);
+      border-radius: 4px; cursor: pointer;
+    }
+    .analog-btn:active { background: #3f3f46; }
+
+    #shutter-button {
+      width: 70px; height: 70px; border-radius: 50%;
+      background: radial-gradient(circle, #f4f4f5 25%, #a1a1aa 65%, #52525b 100%);
+      border: 4px solid #18181b; box-shadow: 0 4px 12px rgba(0,0,0,0.8), inset 0 2px 3px #fff;
+      cursor: pointer; position: relative;
+    }
+    #shutter-button:active {
+      transform: scale(0.96); box-shadow: 0 2px 6px rgba(0,0,0,0.9), inset 0 2px 5px #000;
+    }
+    #shutter-button::after {
+      content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 14px; height: 14px; border-radius: 50%; background: #27272a;
+    }
+
+    #film-flash {
+      position: absolute; inset: 0; background: #fff; z-index: 50;
+      opacity: 0; pointer-events: none; transition: opacity 0.08s ease-out;
+    }
+    #q-modal {
+      display: none; position: absolute; inset: 0; z-index: 30;
+      background: rgba(18, 18, 20, 0.96); backdrop-filter: blur(8px);
+      padding: 24px; flex-direction: column; justify-content: space-between;
+    }
+    .slider-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .slider-header { display: flex; justify-content: space-between; font-size: 11px; }
+    input[type=range] { width: 100%; accent-color: var(--fuji-yellow); height: 6px; }
+
+    #chem-dev-screen {
+      display: none; position: absolute; inset: 0; z-index: 60;
+      background: #450a0a; color: #fca5a5; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; text-align: center;
+    }
+    .tank-spin {
+      width: 48px; height: 48px; border: 4px solid #ef4444;
+      border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    #darkroom-modal {
+      display: none; position: absolute; inset: 0; z-index: 40;
+      background: #09090b; padding: 20px; overflow-y: auto; flex-direction: column; gap: 16px;
+    }
+    .contact-sheet { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 10px; }
+    .darkroom-card {
+      background: #18181b; border: 1px solid #27272a; padding: 6px;
+      display: flex; flex-direction: column; gap: 6px; border-radius: 4px;
+    }
+    .darkroom-card img { width: 100%; height: auto; border-radius: 2px; }
+    .darkroom-card a {
+      background: #27272a; color: #fafafa; text-align: center;
+      padding: 6px; font-size: 10px; text-decoration: none; border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="camera-app">
+  <div id="film-flash"></div>
+
+  <div id="top-bar">
+    <div class="brand-stamp">
+      FUJIFILM
+      <span>X-H1 HYBRID</span>
+    </div>
+    <div class="xh1-sub-lcd">
+      <div class="lcd-row">
+        <span id="lcd-roll-type">C-CHROME</span>
+        <span id="lcd-iso">ISO 400</span>
+      </div>
+      <div class="lcd-row" style="margin: 2px 0;">
+        <span class="lcd-main" id="lcd-counter">EXP [00/24]</span>
+        <span id="lcd-wb-tag">5500K</span>
+      </div>
+      <div class="lcd-row">
+        <span>BAT 98%</span>
+        <span>SLOT-1 FILM</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="viewfinder-container">
+    <video id="view-stream" autoplay playsinline muted></video>
+    <div id="grain-screen"></div>
+    <div id="vignette-screen"></div>
+
+    <div id="viewfinder-hud">
+      <div style="display:flex; justify-content:space-between;">
+        <span class="hud-tag" style="color:var(--fuji-green)">MF STBY</span>
+        <span class="hud-tag" id="hud-film-name">CLASSIC CHROME</span>
+      </div>
+      <div class="hud-grid-h" style="top:33.33%;"></div>
+      <div class="hud-grid-h" style="top:66.66%;"></div>
+      <div class="hud-grid-v" style="left:33.33%;"></div>
+      <div class="hud-grid-v" style="left:66.66%;"></div>
+      <div class="hud-focus"></div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span class="hud-tag">SS 1/125</span>
+        <button id="direct-install-btn" class="hud-tag" style="color:var(--fuji-yellow); border-color:var(--fuji-yellow); pointer-events:auto; display:none; cursor:pointer;">[+] INSTALAR</button>
+        <span class="hud-tag" id="hud-roll-counter">RESTAN: 24</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="bottom-console">
+    <div class="film-selector-wrap" id="film-tray">
+      <button class="film-pill active" data-sim="classic-chrome" data-name="CLASSIC CHROME" data-lcd="C-CHROME">Fuji Classic Chrome</button>
+      <button class="film-pill" data-sim="classic-neg" data-name="CLASSIC NEGATIVE" data-lcd="C-NEG">Fuji Classic Neg</button>
+      <button class="film-pill" data-sim="velvia" data-name="VELVIA 50" data-lcd="VELVIA">Fuji Velvia 50</button>
+      <button class="film-pill" data-sim="astia" data-name="ASTIA 100F" data-lcd="ASTIA">Fuji Astia</button>
+      <button class="film-pill" data-sim="provia" data-name="PROVIA STD" data-lcd="PROVIA">Fuji Provia</button>
+      <button class="film-pill" data-sim="eterna" data-name="ETERNA CINEMA" data-lcd="ETERNA">Fuji Eterna</button>
+      <button class="film-pill" data-sim="acros-r" data-name="ACROS+R FILTER" data-lcd="ACROS+R">Fuji Acros+R</button>
+      <button class="film-pill" data-sim="leica-m9" data-name="LEICA M9 CCD" data-lcd="M9-CCD">Leica M9 CCD</button>
+      <button class="film-pill" data-sim="leica-mono" data-name="LEICA MONOCHROM" data-lcd="LEICA-M">Leica Monochrom</button>
+      <button class="film-pill" data-sim="kodachrome" data-name="KODACHROME 64" data-lcd="K-64">Kodachrome 64</button>
+      <button class="film-pill" data-sim="portra-400" data-name="PORTRA 400" data-lcd="PORTRA">Kodak Portra 400</button>
+      <button class="film-pill" data-sim="tri-x" data-name="KODAK TRI-X 400" data-lcd="TRI-X">Kodak Tri-X 400</button>
+      <button class="film-pill" data-sim="polaroid-600" data-name="POLAROID 600" data-lcd="POLA-600">Polaroid 600</button>
+      <button class="film-pill" data-sim="ilford-hp5" data-name="ILFORD HP5 PLUS" data-lcd="HP5-PLUS">Ilford HP5 Plus</button>
+      <button class="film-pill" data-sim="cyanotype" data-name="CYANOTYPE 1880" data-lcd="CYANO">Cianotipia 1880</button>
+      <button class="film-pill" data-sim="daguerreotype" data-name="DAGUERREOTYPE 1839" data-lcd="DAGUERRE">Daguerrotipo 1839</button>
+    </div>
+
+    <div class="shutter-row">
+      <button class="analog-btn" id="btn-open-q">MENÚ [Q]</button>
+      <button id="shutter-button" aria-label="Disparador"></button>
+      <button class="analog-btn" id="btn-develop-roll" style="color:var(--fuji-yellow); border-color:var(--fuji-yellow);">REBOBINAR</button>
+    </div>
+  </div>
+</div>
+
+<div id="q-modal">
+  <div>
+    <h3 style="color:var(--fuji-yellow); font-size:13px; margin-bottom:14px;">AJUSTES FOTOGRÁFICOS [Q-MENU]</h3>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span>TEMPERATURA COLOR (WB)</span>
+        <span id="val-wb">5500 K</span>
+      </div>
+      <input type="range" id="slider-wb" min="2800" max="9500" step="100" value="5500">
+    </div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span>MICROCONTRASTE / CLARIDAD</span>
+        <span id="val-clarity">0</span>
+      </div>
+      <input type="range" id="slider-clarity" min="-50" max="50" step="5" value="0">
+    </div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span>GRANO ANALÓGICO</span>
+        <span id="val-grain">20%</span>
+      </div>
+      <input type="range" id="slider-grain" min="0" max="60" step="5" value="20">
+    </div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span>VIÑETEO DE ÓPTICA</span>
+        <span id="val-vignette">30%</span>
+      </div>
+      <input type="range" id="slider-vignette" min="0" max="100" step="5" value="30">
+    </div>
+    <div class="slider-group">
+      <div class="slider-header">
+        <span>LONGITUD DEL CARRETE</span>
+        <span id="val-roll-size">24 FOTOS</span>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:4px;">
+        <button class="analog-btn size-opt" data-size="12">12 EXP</button>
+        <button class="analog-btn size-opt" data-size="24" style="border-color:var(--fuji-yellow)">24 EXP</button>
+        <button class="analog-btn size-opt" data-size="36">36 EXP</button>
+      </div>
+    </div>
+  </div>
+  <button class="analog-btn" id="btn-close-q" style="width:100%; padding:12px; background:var(--fuji-metal);">CONFIRMAR Y VOLVER</button>
+</div>
+
+<div id="chem-dev-screen">
+  <div class="tank-spin"></div>
+  <h2 style="font-size:15px; letter-spacing:1px;">REVELANDO QUÍMICAMENTE EL CARRETE...</h2>
+  <p style="font-size:11px; opacity:0.8;">Agitando tanque &middot; Baño de paro &middot; Fijador</p>
+</div>
+
+<div id="darkroom-modal">
+  <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #27272a; padding-bottom:12px;">
+    <div>
+      <h3 style="color:var(--fuji-green); font-size:13px;">HOJA DE CONTACTOS / CARRETE REVELADO</h3>
+      <p style="font-size:10px; color:#a1a1aa;" id="darkroom-stats">Total: 0 exposiciones</p>
+    </div>
+    <button class="analog-btn" id="btn-new-roll" style="color:var(--fuji-yellow); border-color:var(--fuji-yellow);">CARGAR NUEVO</button>
+  </div>
+  <div class="contact-sheet" id="contact-sheet"></div>
+</div>
+
+<canvas id="dev-canvas" style="display:none;"></canvas>
+
+<script>
+  let totalExposures = 24;
+  let takenExposures = 0;
+  let exposedRoll = [];
+  let activeSimulation = 'classic-chrome';
+  let activeSimName = 'CLASSIC CHROME';
+  let activeLcdName = 'C-CHROME';
+
+  let wbKelvin = 5500;
+  let clarityVal = 0;
+  let grainVal = 20;
+  let vignetteVal = 30;
+
+  const video = document.getElementById('view-stream');
+  const grainOverlay = document.getElementById('grain-screen');
+  const vignetteOverlay = document.getElementById('vignette-screen');
+  const flash = document.getElementById('film-flash');
+  const canvas = document.getElementById('dev-canvas');
+
+  const lcdRollType = document.getElementById('lcd-roll-type');
+  const lcdCounter = document.getElementById('lcd-counter');
+  const lcdWbTag = document.getElementById('lcd-wb-tag');
+  const hudFilmName = document.getElementById('hud-film-name');
+  const hudRollCounter = document.getElementById('hud-roll-counter');
+
+  const qModal = document.getElementById('q-modal');
+  const darkroomModal = document.getElementById('darkroom-modal');
+  const chemDevScreen = document.getElementById('chem-dev-screen');
+  const contactSheet = document.getElementById('contact-sheet');
+  const darkroomStats = document.getElementById('darkroom-stats');
+  const directInstallBtn = document.getElementById('direct-install-btn');
+
+  // CONTROL DEL PROMPT DE INSTALACIÓN NATIVO DE ANDROID
+  let nativeInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    nativeInstallPrompt = e;
+    directInstallBtn.style.display = 'block';
+  });
+
+  directInstallBtn.addEventListener('click', async () => {
+    if (nativeInstallPrompt) {
+      nativeInstallPrompt.prompt();
+      const { outcome } = await nativeInstallPrompt.userChoice;
+      if (outcome === 'accepted') {
+        directInstallBtn.style.display = 'none';
+        nativeInstallPrompt = null;
+      }
+    }
+  });
+
+  async function startSensor() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      applyLiveEffects();
+    } catch (e) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+        applyLiveEffects();
+      } catch (err) {
+        console.warn("Cámara no iniciada:", err);
+      }
+    }
+  }
+
+  function getFilterMatrix(sim, wb, clarity) {
+    const wbDiff = (wb - 5500) / 1000;
+    const warmSepia = wbDiff > 0 ? (wbDiff * 0.05) : 0;
+    const coolHue = wbDiff < 0 ? (wbDiff * 5) : (wbDiff * 2);
+    const contrastAdj = 1 + (clarity / 200);
+
+    switch(sim) {
+      case 'classic-chrome': return `contrast(${1.18 * contrastAdj}) saturate(0.78) sepia(${0.08 + warmSepia}) hue-rotate(${coolHue}deg) brightness(0.98)`;
+      case 'classic-neg': return `contrast(${1.32 * contrastAdj}) saturate(1.12) sepia(${0.18 + warmSepia}) hue-rotate(${-10 + coolHue}deg) brightness(0.95)`;
+      case 'velvia': return `contrast(${1.28 * contrastAdj}) saturate(1.6) hue-rotate(${coolHue}deg) brightness(1.02)`;
+      case 'astia': return `contrast(${1.08 * contrastAdj}) saturate(0.95) sepia(${0.04 + warmSepia}) brightness(1.03)`;
+      case 'provia': return `contrast(${1.1 * contrastAdj}) saturate(1.05) brightness(1.0)`;
+      case 'eterna': return `contrast(${0.88 * contrastAdj}) saturate(0.72) sepia(0.08) brightness(1.05)`;
+      case 'acros-r': return `grayscale(1) contrast(${1.5 * contrastAdj}) brightness(0.92)`;
+      case 'leica-m9': return `contrast(${1.24 * contrastAdj}) saturate(1.3) hue-rotate(${5 + coolHue}deg) brightness(1.01)`;
+      case 'leica-mono': return `grayscale(1) contrast(${1.75 * contrastAdj}) brightness(0.95)`;
+      case 'kodachrome': return `contrast(${1.25 * contrastAdj}) saturate(1.2) sepia(${0.25 + warmSepia}) hue-rotate(${-12 + coolHue}deg) brightness(0.96)`;
+      case 'portra-400': return `contrast(${1.08 * contrastAdj}) saturate(1.05) sepia(${0.12 + warmSepia}) hue-rotate(${-4 + coolHue}deg) brightness(1.04)`;
+      case 'tri-x': return `grayscale(1) contrast(${1.4 * contrastAdj}) brightness(0.88)`;
+      case 'polaroid-600': return `contrast(${0.92 * contrastAdj}) saturate(0.85) sepia(0.2) hue-rotate(10deg) brightness(1.08)`;
+      case 'ilford-hp5': return `grayscale(1) contrast(${1.22 * contrastAdj}) brightness(0.96)`;
+      case 'cyanotype': return `sepia(1) hue-rotate(185deg) saturate(2.4) contrast(${1.3 * contrastAdj}) brightness(0.85)`;
+      case 'daguerreotype': return `grayscale(1) sepia(0.35) contrast(${1.65 * contrastAdj}) brightness(0.82)`;
+      default: return `contrast(1) saturate(1)`;
+    }
+  }
+
+  function applyLiveEffects() {
+    video.style.filter = getFilterMatrix(activeSimulation, wbKelvin, clarityVal);
+    grainOverlay.style.opacity = (grainVal / 100).toString();
+    vignetteOverlay.style.boxShadow = `inset 0 0 ${vignetteVal * 1.5}px rgba(0,0,0,0.85)`;
+    
+    lcdRollType.textContent = activeLcdName;
+    hudFilmName.textContent = activeSimName;
+    lcdWbTag.textContent = `${wbKelvin}K`;
+    updateLcdCounters();
+  }
+
+  function updateLcdCounters() {
+    const padTaken = String(takenExposures).padStart(2, '0');
+    lcdCounter.textContent = `EXP [${padTaken}/${totalExposures}]`;
+    hudRollCounter.textContent = `RESTAN: ${totalExposures - takenExposures}`;
+  }
+
+  document.querySelectorAll('.film-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.film-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      activeSimulation = btn.getAttribute('data-sim');
+      activeSimName = btn.getAttribute('data-name');
+      activeLcdName = btn.getAttribute('data-lcd');
+      applyLiveEffects();
+    });
+  });
+
+  document.getElementById('shutter-button').addEventListener('click', () => {
+    if (takenExposures >= totalExposures) {
+      alert("¡Carrete terminado! Pulsa 'REBOBINAR' para revelarlo.");
+      return;
+    }
+
+    flash.style.opacity = '0.9';
+    setTimeout(() => { flash.style.opacity = '0'; }, 80);
+
+    playMechanicalShutterSound();
+    captureExposedFrame();
+
+    takenExposures++;
+    updateLcdCounters();
+
+    if (takenExposures === totalExposures) {
+      setTimeout(() => {
+        if(confirm("¡Último fotograma disparado! ¿Quieres rebobinar y revelar el carrete ahora?")) {
+          triggerDevelopment();
+        }
+      }, 350);
+    }
+  });
+
+  function captureExposedFrame() {
+    const w = video.videoWidth || 1920;
+    const h = video.videoHeight || 1080;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+
+    ctx.filter = getFilterMatrix(activeSimulation, wbKelvin, clarityVal);
+    ctx.drawImage(video, 0, 0, w, h);
+
+    if (grainVal > 0) injectAnalogGrain(ctx, w, h, grainVal);
+    if (vignetteVal > 0) injectVignette(ctx, w, h, vignetteVal);
+
+    exposedRoll.push({
+      id: takenExposures + 1,
+      sim: activeSimName,
+      timestamp: new Date().toLocaleTimeString(),
+      data: canvas.toDataURL('image/jpeg', 0.94)
+    });
+  }
+
+  function injectAnalogGrain(ctx, w, h, intensity) {
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+    const factor = (intensity / 100) * 35;
+    for (let i = 0; i < data.length; i += 4) {
+      const noise = (Math.random() - 0.5) * factor;
+      data[i] = Math.min(255, Math.max(0, data[i] + noise));
+      data[i+1] = Math.min(255, Math.max(0, data[i+1] + noise));
+      data[i+2] = Math.min(255, Math.max(0, data[i+2] + noise));
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  function injectVignette(ctx, w, h, amount) {
+    const gradient = ctx.createRadialGradient(w/2, h/2, (Math.min(w, h)/2) * 0.7, w/2, h/2, Math.max(w, h)/1.2);
+    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+    gradient.addColorStop(1, `rgba(0,0,0,${amount / 110})`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  function playMechanicalShutterSound() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(140, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.09);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.1);
+    } catch(e) {}
+  }
+
+  document.getElementById('btn-develop-roll').addEventListener('click', () => {
+    if (exposedRoll.length === 0) {
+      alert("No hay ningún fotograma expuesto en este carrete todavía.");
+      return;
+    }
+    triggerDevelopment();
+  });
+
+  function triggerDevelopment() {
+    chemDevScreen.style.display = 'flex';
+    setTimeout(() => {
+      chemDevScreen.style.display = 'none';
+      openDarkroomContactSheet();
+    }, 2200);
+  }
+
+  function openDarkroomContactSheet() {
+    contactSheet.innerHTML = '';
+    darkroomStats.textContent = `Carrete revelado: ${exposedRoll.length} fotogramas`;
+
+    exposedRoll.forEach((item) => {
+      const card = document.createElement('div');
+      card.className = 'darkroom-card';
+
+      const img = document.createElement('img');
+      img.src = item.data;
+
+      const meta = document.createElement('div');
+      meta.style.fontSize = '9px';
+      meta.style.display = 'flex';
+      meta.style.justifyContent = 'space-between';
+      meta.style.color = '#71717a';
+      meta.innerHTML = `<span>#${String(item.id).padStart(2,'0')} ${item.sim}</span><span>${item.timestamp}</span>`;
+
+      const downloadLink = document.createElement('a');
+      downloadLink.href = item.data;
+      downloadLink.download = `ROLL_${item.sim.replace(/\s+/g,'_')}_FRAME_${item.id}.jpg`;
+      downloadLink.textContent = 'GUARDAR FOTO';
+
+      card.appendChild(img);
+      card.appendChild(meta);
+      card.appendChild(downloadLink);
+      contactSheet.appendChild(card);
+    });
+
+    darkroomModal.style.display = 'flex';
+  }
+
+  document.getElementById('btn-new-roll').addEventListener('click', () => {
+    exposedRoll = [];
+    takenExposures = 0;
+    updateLcdCounters();
+    darkroomModal.style.display = 'none';
+  });
+
+  document.getElementById('btn-open-q').addEventListener('click', () => { qModal.style.display = 'flex'; });
+  document.getElementById('btn-close-q').addEventListener('click', () => { qModal.style.display = 'none'; });
+
+  document.getElementById('slider-wb').addEventListener('input', (e) => {
+    wbKelvin = parseInt(e.target.value);
+    document.getElementById('val-wb').textContent = `${wbKelvin} K`;
+    applyLiveEffects();
+  });
+
+  document.getElementById('slider-clarity').addEventListener('input', (e) => {
+    clarityVal = parseInt(e.target.value);
+    document.getElementById('val-clarity').textContent = `${clarityVal > 0 ? '+' : ''}${clarityVal}`;
+    applyLiveEffects();
+  });
+
+  document.getElementById('slider-grain').addEventListener('input', (e) => {
+    grainVal = parseInt(e.target.value);
+    document.getElementById('val-grain').textContent = `${grainVal}%`;
+    applyLiveEffects();
+  });
+
+  document.getElementById('slider-vignette').addEventListener('input', (e) => {
+    vignetteVal = parseInt(e.target.value);
+    document.getElementById('val-vignette').textContent = `${vignetteVal}%`;
+    applyLiveEffects();
+  });
+
+  document.querySelectorAll('.size-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.size-opt').forEach(b => b.style.borderColor = '#52525b');
+      btn.style.borderColor = 'var(--fuji-yellow)';
+      totalExposures = parseInt(btn.getAttribute('data-size'));
+      document.getElementById('val-roll-size').textContent = `${totalExposures} FOTOS`;
+      updateLcdCounters();
+    });
+  });
+
+  window.addEventListener('load', startSensor);
+</script>
+</body>
+</html>
